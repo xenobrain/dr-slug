@@ -27,7 +27,7 @@ module Slug
       v = uint32(data, offset)
       v >= 0x80000000 ? v - 0x100000000 : v
     end
-
+    
     def self.tag(data, offset)
       data.getbyte(offset).chr + data.getbyte(offset + 1).chr +
         data.getbyte(offset + 2).chr + data.getbyte(offset + 3).chr
@@ -859,12 +859,17 @@ module Slug
           gy_max = glyph[:y_max]
 
           glyph_w = ((gx_max - gx_min) * ppfu).ceil + 2
-          glyph_h = ((gy_max - gy_min) * ppfu).ceil + 2
+
+          # Compute pixel-aligned y bounds independently so glyphs
+          # sharing the same gy_max (x-height) always align vertically
+          py_lo = (gy_min * ppfu).floor
+          py_hi = (gy_max * ppfu).ceil
+          glyph_h = py_hi - py_lo + 2
 
           if glyph_w > 0 && glyph_h > 0
             alphas = Rasterizer.rasterize_glyph(
               glyph[:curves], glyph_w, glyph_h, ppfu,
-              gx_min.to_f, gy_min.to_f, stem_darkening
+              gx_min.to_f, (py_lo - 1).to_f / ppfu, stem_darkening
             )
 
             # Blit into local pixel array
@@ -872,7 +877,7 @@ module Slug
             baseline_row = descent_px
 
             glyph_h.times do |grow|
-              dy = baseline_row + (gy_min * ppfu).round + grow
+              dy = baseline_row + py_lo - 1 + grow
               next if dy < 0 || dy >= height
 
               glyph_w.times do |gcol|
